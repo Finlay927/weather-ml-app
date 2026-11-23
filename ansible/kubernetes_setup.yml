@@ -1,6 +1,6 @@
 - name: kubernetes Setup
   hosts: localhost
-  uesr: ubuntu
+  user: ubuntu
   become: yes
 
   tasks:
@@ -17,21 +17,26 @@
 
   - name: 3. Install Minikube
     shell:
-      cmd: Install /tmp/minikube-linux-amd64 /usr/local/bin/minikube
+      cmd: install /tmp/minikube-linux-amd64 /usr/local/bin/minikube
 
-  - name: 4. Start Minikube
+  - name: 4. Ubuntu is in the docker group
+    shell:
+      cmd: sudo usermod -aG docker ubuntu
+
+  - name: 5. Start Minikube
+    become: no
     shell:
       cmd: minikube start --driver=docker
 
-  - name: 5. Deploy Application
+  - name: 6. Deploy Application
     shell:
       cmd: kubectl apply -f deployment.yml
 
-  - name: 6. Create Service
+  - name: 7. Create Service
     shell:
       cmd: kubectl apply -f service.yml
 
-  - name: 7. Scale Deployment
+  - name: 8. Scale Deployment
     shell:
       cmd: kubectl scale deployment myapp --replicas=3
 
