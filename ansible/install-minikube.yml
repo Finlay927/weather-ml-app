@@ -1,0 +1,70 @@
+---
+- name: Install Docker and start Minikube on the production server
+  hosts: production
+  become: true
+
+  vars:
+    minikube_url: "https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64"
+    target_user: ubuntu
+
+  tasks:
+    - name: Install Docker and supporting packages
+      ansible.builtin.apt:
+        name:
+          - docker.io
+          - conntrack
+          - curl
+        state: present
+        update_cache: true
+
+    - name: Ensure the Docker service is started and enabled at boot
+      ansible.builtin.service:
+        name: docker
+        state: started
+        enabled: true
+
+    - name: Add {{ target_user }} to the docker group
+      ansible.builtin.user:
+        name: "{{ target_user }}"
+        groups: docker
+        append: true
+
+    - name: Download and install the Minikube binary
+      ansible.builtin.get_url:
+        url: "{{ minikube_url }}"
+        dest: /usr/local/bin/minikube
+        mode: "0755"
+        owner: root
+        group: root
+
+    - name: Check whether Minikube is already running
+      ansible.builtin.shell:
+        cmd: sg docker -c "minikube status"
+      become_user: "{{ target_user }}"
+      environment:
+        HOME: "/home/{{ target_user }}"
+      register: minikube_state
+      changed_when: false
+      failed_when: false
+
+    - name: Start Minikube using the Docker driver
+      ansible.builtin.shell:
+        cmd: sg docker -c "minikube start --driver=docker"
+      become_user: "{{ target_user }}"
+      environment:
+        HOME: "/home/{{ target_user }}"
+      when: "'host: Running' not in minikube_state.stdout"
+      register: minikube_start
+
+    - name: Report the Minikube status
+      ansible.builtin.shell:
+        cmd: sg docker -c "minikube status"
+      become_user: "{{ target_user }}"
+      environment:
+        HOME: "/home/{{ target_user }}"
+      register: minikube_final
+      changed_when: false
+
+    - name: Show the Minikube status
+      ansible.builtin.debug:
+        var: minikube_final.stdout_lines

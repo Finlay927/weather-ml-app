@@ -1,0 +1,59 @@
+---
+- name: Install kubectl on the production server
+  hosts: production
+  become: true
+
+  vars:
+    k8s_minor: "v1.37"
+    keyring_path: /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+
+  tasks:
+    - name: Install prerequisite packages
+      ansible.builtin.apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gnupg
+        state: present
+        update_cache: true
+
+    - name: Ensure the apt keyrings directory exists
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: "0755"
+
+    - name: Download the Kubernetes repository signing key
+      ansible.builtin.get_url:
+        url: "https://pkgs.k8s.io/core:/stable:/{{ k8s_minor }}/deb/Release.key"
+        dest: /tmp/kubernetes-release.key
+        mode: "0644"
+
+    - name: Convert the signing key into a keyring
+      ansible.builtin.command:
+        cmd: "gpg --batch --yes --dearmor -o {{ keyring_path }} /tmp/kubernetes-release.key"
+      args:
+        creates: "{{ keyring_path }}"
+
+    - name: Add the Kubernetes apt repository
+      ansible.builtin.apt_repository:
+        repo: "deb [signed-by={{ keyring_path }}] https://pkgs.k8s.io/core:/stable:/{{ k8s_minor }}/deb/ /"
+        filename: kubernetes
+        state: present
+        update_cache: true
+
+    - name: Install kubectl
+      ansible.builtin.apt:
+        name: kubectl
+        state: present
+
+    - name: Check the installed kubectl version
+      ansible.builtin.command:
+        cmd: kubectl version --client
+      register: kubectl_check
+      changed_when: false
+
+    - name: Show the kubectl version
+      ansible.builtin.debug:
+        var: kubectl_check.stdout_lines
