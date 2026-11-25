@@ -51,3 +51,9 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Tag Docker image
+        run: docker tag weather-ml-app:v1 drenni300/weather-ml-app:ci-test
+
+      - name: Push Docker image
+        run: docker push drenni300/weather-ml-app:ci-test
