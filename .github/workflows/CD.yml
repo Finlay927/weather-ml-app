@@ -1,0 +1,77 @@
+
+name: CD Pipeline
+
+on:
+  workflow_run:
+    workflows:
+      - CI Pipeline
+    types:
+      - completed
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: [self-hosted, production]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Check Kubernetes connection
+        run: kubectl get nodes
+
+      - name: Update deployment image
+        env:
+          IMAGE_TAG: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          kubectl set image -f k8s/deployment.yaml \
+            weather-ml-app=drenni300/weather-ml-app:$IMAGE_TAG \
+            --local -o yaml > k8s/deployment-rendered.yaml
+
+      - name: Deploy and monitor service availability
+        run: |
+          URL="http://$(minikube ip):30080"
+          FAILURE_FILE=$(mktemp)
+          
+          curl --fail --silent --show-error --max-time 5 "$URL" > /dev/null
+
+          (
+            while true; do
+              if curl --fail --silent --max-time 5 "$URL" > /dev/null; then
+                echo "$(date -u) - HTTP check successful"
+              else
+                echo "$(date -u) - HTTP check failed"
+                echo "failed" >> "$FAILURE_FILE"
+              fi
+              sleep 1
+            done
+          ) &
+
+          MONITOR_PID=$!
+          trap 'kill "$MONITOR_PID" 2>/dev/null || true; rm -f "$FAILURE_FILE"' EXIT
+
+          kubectl apply -f k8s/deployment-rendered.yaml
+          kubectl rollout status deployment/weather-ml-app --timeout=300s
+
+          kill "$MONITOR_PID" 2>/dev/null || true
+          wait "$MONITOR_PID" 2>/dev/null || true
+
+          if [ -s "$FAILURE_FILE" ]; then
+            echo "Service disruption detected"
+            exit 1
+          fi
+
+          echo "No service disruption detected during monitoring"
+
+      - name: Verify running pods
+        run: kubectl get pods
+
+      - name: Verify application availability
+        run: curl --fail --show-error --max-time 5 http://$(minikube ip):30080

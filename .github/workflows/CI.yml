@@ -57,3 +57,9 @@ jobs:
 
       - name: Push Docker image
         run: docker push drenni300/weather-ml-app:${{ github.sha }}
+
+      - name: Publish versioned Docker image
+        if: github.ref == 'refs/heads/main'
+        run: |
+          docker tag weather-ml-app:v1 drenni300/weather-ml-app:v1
+          docker push drenni300/weather-ml-app:v1
