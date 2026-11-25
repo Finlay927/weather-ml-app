@@ -1,0 +1,37 @@
+---
+- name: Create a Service for the weather ML application
+  hosts: production
+  become: false
+
+  vars:
+    manifest_dir: "{{ playbook_dir }}/../k8s"
+    service_name: weather-ml-service
+
+  tasks:
+    - name: Apply the Service manifest
+      ansible.builtin.command:
+        cmd: "kubectl apply -f {{ manifest_dir }}/service.yaml"
+      register: apply_result
+      changed_when: "'unchanged' not in apply_result.stdout"
+
+    - name: Retrieve the Service details
+      ansible.builtin.command:
+        cmd: "kubectl get service {{ service_name }} -o wide"
+      register: service_details
+      changed_when: false
+
+    - name: Confirm the Service has endpoints
+      ansible.builtin.command:
+        cmd: "kubectl get endpoints {{ service_name }}"
+      register: endpoints
+      changed_when: false
+
+    - name: Get the Minikube node IP
+      ansible.builtin.command:
+        cmd: minikube ip
+      register: minikube_ip
+      changed_when: false
+
+    - name: Show the Service details and access URL
+      ansible.builtin.debug:
+        msg: "{{ service_details.stdout_lines + endpoints.stdout_lines + ['Access URL: http://' + minikube_ip.stdout + ':30080'] }}"

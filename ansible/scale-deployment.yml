@@ -1,0 +1,55 @@
+---
+- name: Scale the deployment and configure the rolling update strategy
+  hosts: production
+  become: false
+
+  vars:
+    manifest_dir: "{{ playbook_dir }}/../k8s"
+    deployment_name: weather-ml-app
+    expected_replicas: 3
+
+  tasks:
+    - name: Apply the updated Deployment manifest
+      ansible.builtin.command:
+        cmd: "kubectl apply -f {{ manifest_dir }}/deployment.yaml"
+      register: apply_result
+      changed_when: "'unchanged' not in apply_result.stdout"
+
+    - name: Wait for the rollout to complete
+      ansible.builtin.command:
+        cmd: "kubectl rollout status deployment/{{ deployment_name }} --timeout=300s"
+      register: rollout_result
+      changed_when: false
+
+    - name: Read back the replica count
+      ansible.builtin.command:
+        cmd: >
+          kubectl get deployment {{ deployment_name }}
+          -o jsonpath={.status.readyReplicas}
+      register: ready_replicas
+      changed_when: false
+
+    - name: Fail if the expected number of replicas is not ready
+      ansible.builtin.assert:
+        that:
+          - ready_replicas.stdout | int == expected_replicas
+        fail_msg: "Expected {{ expected_replicas }} ready replicas, found {{ ready_replicas.stdout }}"
+        success_msg: "{{ expected_replicas }} replicas are ready"
+
+    - name: Read back the rolling update strategy
+      ansible.builtin.command:
+        cmd: >
+          kubectl get deployment {{ deployment_name }}
+          -o jsonpath={.spec.strategy}
+      register: strategy
+      changed_when: false
+
+    - name: List the running pods
+      ansible.builtin.command:
+        cmd: "kubectl get pods -l app={{ deployment_name }} -o wide"
+      register: pod_list
+      changed_when: false
+
+    - name: Show the scaling result
+      ansible.builtin.debug:
+        msg: "{{ ['Strategy: ' + strategy.stdout] + pod_list.stdout_lines }}"
