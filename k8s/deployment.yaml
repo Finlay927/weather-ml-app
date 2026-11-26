@@ -1,3 +1,4 @@
+
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -21,12 +22,17 @@ spec:
       labels:
         app: weather-ml-app
     spec:
+      terminationGracePeriodSeconds: 60
       containers:
         - name: weather-ml-app
           image: drenni300/weather-ml-app:v1
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 5000
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "sleep 10"]
           resources:
             requests:
               memory: "128Mi"
