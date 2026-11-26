@@ -44,7 +44,7 @@ jobs:
 
           (
             while true; do
-              if curl --fail --silent --max-time 5 "$URL" > /dev/null; then
+              if curl --fail --silent --show-error --max-time 5 "$URL" > /dev/null; then
                 echo "$(date -u) - HTTP check successful"
               else
                 echo "$(date -u) - HTTP check failed"
